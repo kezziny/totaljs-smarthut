@@ -1,0 +1,13 @@
+[
+	{
+		"id": "mqtt_io",
+		"group": "MQTT",
+		"name": "IO",
+		"url": "https://raw.githubusercontent.com/kezziny/totaljs-smarthut/master/components/IO.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
+	}
+]
