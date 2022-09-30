@@ -1,0 +1,192 @@
+<script total>
+
+	exports.name = 'I/O';
+	exports.icon = 'fa fa-sign-in';
+	exports.group = 'MQTT';
+	exports.config = { name: '', broker: '', topic: '' };
+	exports.outputs = [{id: "output", name: "Output"}];
+	exports.inputs = [{id: "input", name: "Input"}];
+	exports.author = 'Ferenc Klein';
+	exports.version = '1';
+	exports.flags = ['mqttbroker-dep'];
+	exports.type = "output";
+
+	exports.make = function(instance, config) {
+		var broker;
+		var subscriptions = [];
+
+		var status = { empty: true, out: "" };
+		var timeout = null;
+
+		instance.reportStatus = function () {
+			if (timeout) {
+				clearTimeout(timeout);
+			}
+
+			timeout = setTimeout(() => {
+				timeout = null;
+				instance.status(status);
+			}, 500);
+		}
+
+		instance.configure = function() {
+			if (!config.name) {
+				let parts = config.topic.split('/');
+				config.name = parts[parts.length - 1];
+			}
+
+			// Unsubscribe prev mqtt things
+			if (subscriptions.length > 0 && broker) {
+				subscriptions.forEach(topic => {
+					broker.unsubscribe(instance.id, topic);
+				});
+				subscriptions = [];
+			}
+
+			// Subscribe mqtt
+			broker = instance.main.find(config.broker);
+
+			if (broker && config.topic) {
+				broker.subscribe(instance.id, config.topic);
+				subscriptions.push(config.topic);
+
+				broker.subscribe(instance.id, config.topic + "/set");
+				subscriptions.push(config.topic + "/set");
+
+				status.status = broker.state.status + ' (subscribed)';
+				status.topic = config.topic;
+			} else {
+				status.status = 'Broker not found';
+				status.topic = config.topic;
+			}
+
+			instance.reportStatus();
+		};
+
+		// Mqtt msg received
+		instance.onmessage = function(topic, message, match, ts) {
+			status.empty = false;
+			status.data = { topic, message, match, ts };
+
+			instance.send('output', status.data);
+			instance.output(status.data);
+		};
+
+		// Input msg received
+		instance.message = function($) {
+			if (broker) {
+				broker.publish(config.topic, $.data);
+				instance.reportStatus();
+			}
+			$.end();
+		};
+
+		instance.input = function(fromflowstreamid, fromid, data) {
+			if (broker) {
+				status.out = JSON.stringify(config.topic);
+				broker.publish(config.topic + "/set", data);
+				instance.reportStatus();
+			}
+		};
+
+		instance.trigger = function(msg) {
+			if (msg.type === 'clear') {
+				status.data = null;
+				status.empty = true;
+				instance.status(status);
+			} else {
+				instance.send('output', status.data);
+				instance.output(status.data);
+			}
+		};
+
+		instance.close = function() {
+			if (subscriptions.length > 0 && broker) {
+				subscriptions.forEach(topic => {
+					broker.unsubscribe(instance.id, topic);
+				});
+				subscriptions = [];
+			}
+		};
+
+		instance.configure();
+	};
+
+	exports.call = function(data, answer) {
+		var arr = [];
+
+		var instances = this.instances();
+
+		instances = instances.filter(i => i.module.flags && i.module.flags.includes('mqttbroker'));
+		for (let com of instances)
+			arr.push({ id: com.id, name: `${com.state.name} (${com.state.status})` });
+
+		answer({
+			brokers: arr,
+		});
+	};
+</script>
+
+<readme>
+</readme>
+
+<style>
+	.CLASS footer { padding: 10px; font-size: 11px; }
+	.CLASS footer > div > div { height: 16px; }
+	.CLASS footer b { float: right; margin-left: 12px; }
+	.CLASS { min-width: 220px; }
+</style>
+
+<settings>
+	<div class="padding CLASS-settings">
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.broker__dirsource:%brokers;dirraw:1;placeholder:Select broker;dirempty:No broker;required:1" class="m"><b>Broker</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.topic__placeholder:devices/status;required:1" class="m"><b>Topic</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.name__placeholder:devices/status" class="m"><b>Name (using last part of topic when left empty)</b></div>
+			</div>
+		</div>
+	</div>
+</settings>
+
+<body>
+	<header>
+		<div data-bind="!STATUS__template__show">
+			<script type="text/html">
+				<i class="ICON"></i>{{ value.topic }}
+			</script>
+		</div>
+	</header>
+	<footer>
+		<button class="exec button" data-exec="FUNC.trigger" data-bind="STATUS.empty__disabled" disabled>Repeat</button>
+		<div data-bind="!STATUS__template__show">
+			<script type="text/html">
+				<div><b>{{ value.status }}</b>Status</div>
+
+				<div><b>{{ value.out }}</b>Out</div>
+
+			</script>
+		</div>
+	</footer>
+</body>
+
+<script>
+	ON('configure_io', function(data) {
+		data.call(function(response) {
+			SET('%brokers', response.brokers);
+			SET('%units', response.units);
+		}, true);
+	});
+
+	FUNC.fflashback_clear = function(el) {
+		SETTER('websocket/send', { TYPE: 'trigger', id: el.attrd2('id'), type: 'clear' });
+	};
+</script>
