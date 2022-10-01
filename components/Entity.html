@@ -90,6 +90,7 @@
 					if (!measurement.source) return;
 					let value = get($.data, measurement.source);
 					if (value === undefined) return;
+					if (measurement.unit === " " && typeof value === "string") value = value.toLowerCase() === "true" || value.toLowerCase() === "on";
 
 					measurements[measurement.name].from = measurements[measurement.name].to;
 					measurements[measurement.name].to = value;
