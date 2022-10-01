@@ -15,7 +15,7 @@
 		var broker;
 		var subscriptions = [];
 
-		var status = { empty: true, out: "" };
+		var status = { empty: true };
 		var timeout = null;
 
 		instance.reportStatus = function () {
@@ -70,22 +70,20 @@
 
 			instance.send('output', status.data);
 			instance.output(status.data);
+			instance.reportStatus();
 		};
 
 		// Input msg received
 		instance.message = function($) {
 			if (broker) {
 				broker.publish(config.topic, $.data);
-				instance.reportStatus();
 			}
 			$.end();
 		};
 
 		instance.input = function(fromflowstreamid, fromid, data) {
 			if (broker) {
-				status.out = JSON.stringify(config.topic);
 				broker.publish(config.topic + "/set", data);
-				instance.reportStatus();
 			}
 		};
 
@@ -131,10 +129,10 @@
 </readme>
 
 <style>
-	.CLASS footer { padding: 10px; font-size: 11px; }
-	.CLASS footer > div > div { height: 16px; }
-	.CLASS footer b { float: right; margin-left: 12px; }
-	.CLASS { min-width: 220px; }
+	.CLASS { max-width: 250px; min-width: 150px; max-height: 500px }
+	.CLASS pre { font-size: 10px; margin: 0; padding: 5px; background-color: #F0F0F0; border-radius: var(--radius); }
+	.CLASS footer > div { margin: 10px; }
+	.CLASS .noscrollbar { max-height: 500px; }
 </style>
 
 <settings>
@@ -167,13 +165,10 @@
 	</header>
 	<footer>
 		<button class="exec button" data-exec="FUNC.trigger" data-bind="STATUS.empty__disabled" disabled>Repeat</button>
-		<div data-bind="!STATUS__template__show">
-			<script type="text/html">
-				<div><b>{{ value.status }}</b>Status</div>
-
-				<div><b>{{ value.out }}</b>Out</div>
-
-			</script>
+		<div data-bind="!STATUS__html pre:Thelpers.jsonformat(JSON.stringify(value.data.message, null, '\t'))__hide:value.empty" class="hidden selectable">
+			<div class="">
+				<pre class="json"></pre>
+			</div>
 		</div>
 	</footer>
 </body>
