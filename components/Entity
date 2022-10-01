@@ -1,0 +1,390 @@
+<script total>
+
+	exports.name = 'Entity';
+	exports.icon = 'fa fa-sign-in';
+	exports.group = 'MQTT';
+	exports.config = { name: 'Entity', broker: '', topic: '',  measurements: [] };
+	exports.outputs = [{id: "event", name: "Event"}];
+	exports.inputs = [{id: "input", name: "Input"}];
+	exports.author = 'Ferenc Klein';
+	exports.version = '1';
+	exports.flags = ['mqttbroker-dep'];
+	exports.type = "output";
+
+	exports.make = function(instance, config) {
+		const get = (obj, path) => path.split(".").reduce((r, k) => r?.[k], obj);
+
+		var broker;
+		var subscriptions = [];
+
+		let measurements = {};
+
+		instance.configure = function() {
+			// Update input list
+			instance.inputs = [];
+			instance.inputs.push({ id: "input", name: "Input" });
+			config.measurements.forEach(measurement => {
+				instance.inputs.push({ id: measurement.name, name: measurement.name });
+			});
+			instance.save();
+
+			// Create measurement store
+			measurements = {};
+			config.measurements.forEach(measurement => {
+				measurements[measurement.name] = {
+					name: measurement.name,
+					from: null,
+					to: null,
+					unit: measurement.unit,
+					tags: measurement.tags,
+				};
+			});
+
+			// Unsubscribe prev mqtt things
+			if (subscriptions.length > 0 && broker) {
+				subscriptions.forEach(topic => {
+					broker.unsubscribe(instance.id, topic);
+				});
+				subscriptions = [];
+			}
+
+			// Subscribe mqtt
+			broker = instance.main.find(config.broker);
+
+			if (broker && config.topic) {
+				broker.subscribe(instance.id, config.topic);
+				subscriptions.push(config.topic);
+
+				broker.subscribe(instance.id, config.topic + "/set");
+				subscriptions.push(config.topic + "/set");
+
+				instance.status({ name: config.name, status: broker.state.status + ' (subscribed)', topic: config.topic });
+			} else {
+				instance.status({ name: config.name, status: 'Broker not found', topic: config.topic });
+			}
+		};
+
+		// Mqtt msg received
+		instance.onmessage = function(topic, message, match, ts) {
+			if (topic === config.topic) {
+				// Sync fields
+			} else {
+				// Handle control messages
+				/*let commands = [];
+				Object.getOwnPropertyNames($.data).forEach(key => {
+					if (!config.measurements.some(measurement => measurement.name === key)) return;
+
+					commands.push($.data[key]);
+				});*/
+			}
+
+			//instance.send('message', { topic, message, match, ts });
+		};
+
+		// Input msg ($.input input received a $.data msg)
+		instance.message = function($) {
+			let events = {};
+
+			if ($.input === "input") {
+				config.measurements.forEach(measurement => {
+					if (!measurement.source) return;
+					let value = get($.data, measurement.source);
+					if (value === undefined) return;
+
+					measurements[measurement.name].from = measurements[measurement.name].to;
+					measurements[measurement.name].to = value;
+					events[measurement.name] = measurements[measurement.name];
+
+					instance.inputs.forEach(input => { if (input.id === measurement.name) input.name = `${measurement.name} (${value}${measurement.unit})`;});
+				});
+			}
+
+			if (Object.getOwnPropertyNames(events).length > 0) {
+				instance.save();
+				instance.publishMeasurements();
+
+				instance.output({ state: measurements, changed: events, controlled: {} });
+			}
+
+			$.end();
+		};
+
+		instance.publishMeasurements = function () {
+			if (!config.topic) return;
+
+			let payload = {};
+			config.measurements.forEach(measurement => {
+				if (measurements[measurement.name].to !== null)
+					payload[measurement.name] = measurements[measurement.name];
+			});
+
+			if (Object.getOwnPropertyNames(payload).length)
+				broker.publish(config.topic, payload);
+
+			// instance.output($.data);
+		}
+
+		instance.input = function(fromflowstreamid, fromid, data) {
+			instance.status({ name: config.name, status: JSON.stringify(data), topic: config.topic });
+			instance.send('event', {state: measurements, controlled: data});
+		};
+
+		instance.close = function() {
+			if (subscriptions.length > 0 && broker) {
+				subscriptions.forEach(topic => {
+					broker.unsubscribe(instance.id, topic);
+				});
+				subscriptions = [];
+			}
+		};
+
+		instance.configure();
+	};
+
+	exports.call = function(data, answer) {
+		var arr = [];
+
+		var instances = this.instances();
+
+		instances = instances.filter(i => i.module.flags && i.module.flags.includes('mqttbroker'));
+		for (let com of instances)
+			arr.push({ id: com.id, name: `${com.state.name} (${com.state.status})` });
+
+		answer({
+			brokers: arr,
+			units: [
+				{id: "A", name: "Amper"},
+				{id: "[]", name: "Array"},
+				{id: "", name: "Boolean"},
+				{id: "°C", name: "Celsius"},
+				{id: "dB", name: "Decibel"},
+				{id: "°F", name: "Fahrenheit"},
+				{id: "K", name: "Kelvin"},
+				{id: "kWh", name: "Kilowatt/hour"},
+				{id: "lux", name: "Lux"},
+				{id: "V", name: "Volt"},
+				{id: "W", name: "Watt"},
+				{id: "Pa", name: "Pascal"},
+				{id: "%", name: "Percent"},
+				{id: "Wh", name: "Watt/hour"},
+				{id: "\"", name: "Text"},
+			]});
+	};
+</script>
+
+<readme>
+</readme>
+
+<style>
+	.CLASS footer { padding: 10px; font-size: 11px; }
+	.CLASS footer > div > div { height: 16px; }
+	.CLASS footer b { float: right; margin-left: 12px; }
+	.CLASS { min-width: 220px; }
+
+	.CLASS-settings figure { padding-left: 20px; }
+
+
+	/*
+	.CLASS-settings figure .unit { float: right; width: 180px; border-left: 1px solid #E0E0E0; padding: 0 8px; cursor: pointer; background-color: rgba(0,0,0,0.03); }
+	.CLASS-settings figure .source { float: right; margin-right: 350px; padding: 6px 8px 0; line-height: 14px; }
+	.CLASS-settings figure .tags { float: right; margin-right: 350px; padding: 6px 8px 0; line-height: 14px; }
+
+
+
+	.CLASS-settings .fields { border: 1px solid #E0E0E0; border-radius: var(--radius); }
+	.CLASS-settings figure { height: 40px; border-top: 1px solid #E0E0E0; line-height: 39px; font-size: 12px; }
+	.CLASS-settings figure:first-child { border-top: 0; line-height: 40px; }
+	.CLASS-settings figure .edit-open { background-color: #F0F0F0; }
+	.CLASS-settings figure .name .label { background-color: #000; outline: 0; padding: 2px 3px; color: #FFF; }
+	.CLASS-settings figure .name .key { font-weight: bold; margin-left: 5px; outline: 0; }
+	.CLASS-settings figure .name > div:first-child { outline: 0; }
+	.CLASS-settings figure .error { font-size: 11px; color: #888; }
+	.CLASS-settings figure .error span { color: #B9261A; outline: 0; min-width: 150px; }
+	.CLASS-settings figure .default { float: right; width: 180px; border-left: 1px solid #E0E0E0; padding: 0 8px; cursor: pointer; line-height: 16px; padding-top: 4px; height: 40px; }
+	.CLASS-settings figure .required { float: right; width: 70px; padding: 0 8px; border-left: 1px solid #E0E0E0; text-align: center; font-size: 11px; cursor: pointer; text-decoration: line-through; }
+	.CLASS-settings figure .required.is { font-weight: bold; text-decoration: none; color: #EC8632; }
+	.CLASS-settings figure .array { float: right; width: 70px; padding: 0 8px; border-left: 1px solid #E0E0E0; text-align: center; font-size: 11px; cursor: pointer; text-decoration: line-through;}
+	.CLASS-settings figure .array.is { font-weight: bold; text-decoration: none; color: #EC8632; }
+	.CLASS-settings figure .controls { float: right; width: 70px; padding: 0; margin: 0; border-left: 1px solid #E0E0E0; text-align: center; }
+	.CLASS-settings figure .controls span { cursor: pointer; margin-left: 5px; }
+	.CLASS-settings figure .controls span:first-child { margin-left: 0; }
+	.CLASS-settings figure.isrequired { background-color: rgba(255,254,209,0.3); }
+	.CLASS-settings figure.ismoved { background-color: rgba(92,29,196,0.3) !important; }
+
+	.ui-dark .CLASS-settings .fields { border-color: #404040; }
+	.ui-dark .CLASS-settings figure.isrequired { background-color: rgba(255,254,209,0.1); }
+	.ui-dark .CLASS-settings figure .edit-open { background-color: #363636; }
+	.ui-dark .CLASS-settings figure .default { border-color: #404040; }
+	.ui-dark .CLASS-settings figure { border-top-color: #404040; }
+	.ui-dark .CLASS-settings figure .unit { border-left-color: #404040; background-color: rgba(100,100,100,0.1); }
+	.ui-dark .CLASS-settings figure .required { border-left-color: #404040; }
+	.ui-dark .CLASS-settings figure .array { border-left-color: #404040; }
+	.ui-dark .CLASS-settings figure .controls { border-left-color: #404040; }
+	.ui-dark .CLASS-settings figure .name .label { background-color: #FFF; color: #000; }*/
+</style>
+
+<settings>
+	<div class="padding CLASS-settings">
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.name__placeholder:Entity;required:1" class="m"><b>Entity name</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.broker__dirsource:%brokers;dirraw:1;placeholder:Select broker;dirempty:No broker;required:1" class="m"><b>Broker</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.topic__placeholder:devices/status" class="m"><b>Topic</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="caption m">
+				<div class="toolbar">
+					<nav>
+						<button class="exec" data-exec="entityMeasurement.add"><i class="fa fa-plus-circle"></i>Add</button>
+					</nav>
+				</div>
+				<label>Fields</label>
+			</div>
+			<div data-bind="?.measurements__template:figure --> data-id__show:value && value.length" class="fields m">
+				<script type="text/html">
+					{{ foreach m in value }}
+					<figure data-id="{{ m.id }}">
+						<div class="row"">
+							<div class="col-md-3 name">
+								<div data---="input__?.measurements[{{ $index }}].name__placeholder:Measurement;required:1" class="m"><b>Measurement</b></div>
+							</div>
+							<div class="col-md-3 unit">
+								<!--<div class="unit hellip exec monospace" data-exec="entityMeasurement.unit">{{ m.unit | raw }}</div>-->
+								<div data---="input__?.measurements[{{$index}}].unit__dirsource:%units;dirraw:1;placeholder:Select unit;dirempty:No unit available;required:1" class="m"><b>Unit</b></div>
+							</div>
+							<div class="col-md-3 source">
+								<div data---="input__?.measurements[{{ $index }}].source__placeholder:Source" class="m"><b>Source</b></div>
+							</div>
+							<div class="col-md-2 controls" style="padding-top: 20px">
+								<span class="exec" data-exec="entityMeasurement.move" data-type="up" title="Move up"><i class="far fa fa-arrow-up"></i></span>
+								<span class="exec" data-exec="entityMeasurement.move" data-type="down" title="Move down"><i class="far fa fa-arrow-down"></i></span>
+								<span class="exec" data-exec="entityMeasurement.rem" title="Remove"><i class="far fa-trash-alt red"></i></span>
+							</div>
+						</div>
+						<div class="row">
+							<div class="col-md-3"><span style="opacity: 0%">_</span></div>
+							<div class="col-md-6">
+								<!--<div data---="input__?.measurements[{{ $index }}].tags__placeholder:{}" class="m"><b>Tags</b></div>-->
+								<div data---="keyvalue__?.measurements[{{ $index }}].tags__placeholderkey:Type a tag name;placeholdervalue:Type a tag value and press enter">Tags</div>
+							</div>
+						</div>
+					</figure>
+					{{ end }}
+				</script>
+			</div>
+		</div>
+	</div>
+</settings>
+
+<body>
+	<header>
+		<div data-bind="!STATUS__template__show">
+			<script type="text/html">
+				<i class="ICON"></i>{{ value.name }}
+			</script>
+		</div>
+	</header>
+	<footer>
+		<div data-bind="!STATUS__template__show">
+			<script type="text/html">
+				<div><b>{{ value.status }}</b>Status</div>
+				<div><b>{{ value.topic }}</b>Topic</div>
+			</script>
+		</div>
+	</footer>
+</body>
+
+<script>
+	ON('configure_entity', function(data) {
+		data.call(function(response) {
+			SET('%brokers', response.brokers);
+			SET('%units', response.units);
+		}, true);
+	});
+
+	TOUCH(function(exports, reinit) {
+
+		exports.settings = function(meta) {
+			if (true || !W.entityMeasurement) {
+				let setterFunction = function(opt, next, attribute) {
+					opt.value = opt.value.replace(/(;|\s|,)/g, '').trim();
+					if (opt.value) {
+						var scope = opt.element.scope();
+						var id = ATTRD(opt.element);
+						var item = scope.get().measurements.findItem('id', id);
+						item[attribute] = opt.value;
+						scope.change('*');
+						next(true);
+					} else
+						next(opt.html);
+				};
+
+
+				W.entityMeasurement = {};
+				W.entityMeasurement.add = function(el) {
+					var scope = el.scope();
+					scope.push('measurements', {
+						id: Math.random().toString(36).substring(4),
+						name: 'Measurement',
+						unit: 'unit',
+						tags: {},
+						source: "",
+					});
+					scope.change('*');
+				};
+
+				W.entityMeasurement.rem = function(el) {
+					var id = ATTRD(el);
+					var scope = el.scope();
+					var model = scope.get();
+					var index = model.measurements.findIndex('id', id);
+					model.measurements.splice(index, 1);
+					scope.update('measurements');
+					scope.change('*');
+				};
+
+				W.entityMeasurement.move = function(el) {
+					var scope = el.scope();
+					var id = ATTRD(el);
+					var container = el.closest('figure');
+					var measurements = scope.get().measurements;
+					var index = measurements.findIndex('id', id);
+					var is = false;
+					var isup = el.attrd('type') === 'up';
+
+					if (isup) {
+						if (index > 0) {
+							var a = measurements[index];
+							measurements[index] = measurements[index - 1];
+							measurements[index - 1] = a;
+							is = true;
+						}
+					} else {
+						if (index <= measurements.length - 2) {
+							var a = measurements[index];
+							measurements[index] = measurements[index + 1];
+							measurements[index + 1] = a;
+							is = true;
+						}
+					}
+
+					if (is) {
+						NODEMOVE(container, isup);
+						scope.change('*');
+						container.aclass('ismoved').rclass('ismoved', 500);
+					}
+				};
+			}
+		};
+	});
+
+</script>
