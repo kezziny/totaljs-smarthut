@@ -9,5 +9,16 @@
 		"color": "",
 		"version": "1",
 		"readme": "to be filled"
+	},
+	{
+		"id": "logic_gate",
+		"group": "Logic",
+		"name": "Logic Gate",
+		"url": "https://kezziny.github.io/totaljs-smarthut/components/LogicGate.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
 	}
 ]
