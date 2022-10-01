@@ -20,5 +20,16 @@
 		"color": "",
 		"version": "1",
 		"readme": "to be filled"
+	},
+	{
+		"id": "entity",
+		"group": "MQTT",
+		"name": "Entity",
+		"url": "https://kezziny.github.io/totaljs-smarthut/components/Entity.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
 	}
 ]
