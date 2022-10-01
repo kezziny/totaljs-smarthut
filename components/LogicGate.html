@@ -1,0 +1,297 @@
+<script total>
+
+	exports.name = 'Logic Gate';
+	exports.icon = 'fa fa-code';
+	exports.author = 'Kezziny';
+	exports.version = '1';
+	exports.group = 'Logic';
+	exports.config = {
+		name: 'Logic gate',
+		gateType: 'and',
+		inputs: [],
+		positiveJson: 'true',
+		negativeJson: 'false'
+	};
+	exports.inputs = [];
+	exports.outputs = [{ id: 'result', name: 'Result' }];
+
+	exports.make = function(instance, config) {
+		const get = (obj, path) => path.split(".").reduce((r, k) => r?.[k], obj);
+
+		let state = {
+		};
+
+		let result = null;
+
+		instance.configure = function() {
+			instance.status({name: config.name});
+
+			state = {};
+
+			instance.inputs = [];
+			config.inputs.forEach(input => {
+				state[input.id] = null;
+				instance.inputs.push({id: input.id, name: input.name});
+			});
+			instance.save();
+		};
+
+		instance.message = function($) {
+			instance.updateState($.input, $.data);
+
+			let numberOfTrue = Object.getOwnPropertyNames(state).filter(key => state[key]).length;
+			let newResult = null;
+			switch (config.gateType) {
+				case "allof": newResult = (Object.getOwnPropertyNames(state).length === numberOfTrue); break;
+				case "anyof": newResult = (numberOfTrue > 0); break;
+				case "noneof": newResult = (numberOfTrue === 0); break;
+			}
+
+			if (newResult !== result) {
+				result = newResult;
+				if (result) {
+					instance.send("result", JSON.parse(config.positiveJson));
+				} else {
+					instance.send("result", JSON.parse(config.negativeJson));
+				}
+			}
+
+			$.destroy();
+		};
+
+		instance.updateState = function(key, raw) {
+			let cfg = undefined;
+
+			config.inputs.forEach(input => {
+				if (input.id === key) {
+					cfg = input;
+				}
+			});
+
+			if (cfg.source) {
+				raw = get(raw, cfg.source);
+			}
+
+			let expected = cfg.expected;
+
+			switch (cfg.type) {
+				case 'boolean': {
+					expected = expected === 'true';
+					break;
+				}
+				case 'number': {
+					expected = +expected;
+					break;
+				}
+			}
+
+			let newState = null;
+
+			switch (cfg.matcher) {
+				case 'equals': { newState = raw === expected; break; }
+				case 'not_equals': { newState = raw !== expected; break; }
+				case 'lt': { newState = raw < expected; break; }
+				case 'le': { newState = raw <= expected; break; }
+				case 'gt': { newState = raw > expected; break; }
+				case 'ge': { newState = raw >= expected; break; }
+			}
+
+			if (state[key] === newState) return;
+
+			state[key] = newState;
+			instance.inputs.forEach((input) => {
+				if (input.id === key) input.name = `${(newState ? '+' : '-')} ${cfg.name} (${JSON.stringify(raw)})`;
+			});
+			instance.save();
+		}
+
+		instance.close = function() {
+			// this instance is closed
+		};
+
+		instance.configure();
+	};
+
+	exports.call = function(data, answer) {
+		answer({
+			gateTypes: [
+				{id: "allof", name: "All of"},
+				{id: "anyof", name: "Any of"},
+				{id: "noneof", name: "None of"},
+			],
+			types: [
+				{id: "boolean", name: "Boolean"},
+				{id: "number", name: "Number"},
+				{id: "string", name: "String"},
+			],
+			matchers: [
+				{id: "equals", name: "Equals"},
+				{id: "not_equals", name: "Not equals"},
+				{id: "lt", name: "Lower than"},
+				{id: "le", name: "Lower or equals"},
+				{id: "gt", name: "Greater than"},
+				{id: "ge", name: "Greater or equals"},
+				{id: "contians", name: "Contains"},
+			]
+		});
+	};
+
+</script>
+
+<readme>
+Markdown readme
+
+```js
+var total = 'Hello world!';
+```
+</readme>
+
+<settings>
+	<div class="padding">
+		<div class="row">
+			<div class="col-md-3">
+				<div data---="input__?.name" class="m"><b>Name</b></div>
+			</div>
+			<div class="col-md-3">
+				<div data---="input__?.gateType__dirsource:%gatetypes;dirraw:1;placeholder:Select type;dirempty:No type available;required:1" class="m"><b>Gate type</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-3">
+				<div data---="input__?.positiveJson" class="m"><b>Output when true (json)</b></div>
+			</div>
+			<div class="col-md-3">
+				<div data---="input__?.negativeJson" class="m"><b>Output when false (json)</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="caption m">
+				<div class="toolbar">
+					<nav>
+						<button class="exec" data-exec="logicGate.add"><i class="fa fa-plus-circle"></i>Add</button>
+					</nav>
+				</div>
+				<label>Fields</label>
+			</div>
+			<div data-bind="?.inputs__template:figure --> data-id__show:value && value.length" class="fields m">
+				<script type="text/html">
+					{{ foreach m in value }}
+					<figure data-id="{{ m.id }}">
+						<div class="row"">
+							<div class="col-md-3 name">
+								<div data---="input__?.inputs[{{ $index }}].name__placeholder:Input;required:1" class="m"><b>Name</b></div>
+							</div>
+							<div class="col-md-3 source">
+								<div data---="input__?.inputs[{{ $index }}].source__placeholder:Source" class="m"><b>Source</b></div>
+							</div>
+							<div class="col-md-2 controls" style="padding-top: 20px">
+								<span class="exec" data-exec="logicGate.move" data-type="up" title="Move up"><i class="far fa fa-arrow-up"></i></span>
+								<span class="exec" data-exec="logicGate.move" data-type="down" title="Move down"><i class="far fa fa-arrow-down"></i></span>
+								<span class="exec" data-exec="logicGate.rem" title="Remove"><i class="far fa-trash-alt red"></i></span>
+							</div>
+						</div>
+						<div class="row"">
+							<div class="col-md-3 matcher">
+								<div data---="input__?.inputs[{{$index}}].matcher__dirsource:%matchers;dirraw:1;placeholder:Select matcher;dirempty:No matcher available;required:1" class="m"><b>Matcher</b></div>
+							</div>
+							<div class="col-md-3 type">
+								<div data---="input__?.inputs[{{$index}}].type__dirsource:%types;dirraw:1;placeholder:Select type;dirempty:No type available;required:1" class="m"><b>Type</b></div>
+							</div>
+							<div class="col-md-3 source">
+								<div data---="input__?.inputs[{{ $index }}].expected__placeholder:Expected value" class="m"><b>Expected value</b></div>
+							</div>
+						</div>
+					</figure>
+					{{ end }}
+				</script>
+			</div>
+		</div>
+	</div>
+</settings>
+
+<style>
+	.CLASS footer { padding: 10px; font-size: 12px; }
+</style>
+
+<script>
+	ON('configure_and', function(data) {
+		data.call(function(response) {
+			SET('%types', response.types);
+			SET('%matchers', response.matchers);
+			SET('%gatetypes', response.gateTypes);
+		}, true);
+	});
+
+	TOUCH(function(exports, reinit) {
+
+		exports.settings = function(meta) {
+			if (true || !W.logicGate) {
+				W.logicGate = {};
+				W.logicGate.add = function(el) {
+					var scope = el.scope();
+					scope.push('inputs', {
+						id: Math.random().toString(36).substring(4),
+						name: 'Measurement',
+						source: '',
+						type: 'boolean',
+						matcher: 'equals',
+						expected: 'true',
+					});
+					scope.change('*');
+				};
+
+				W.logicGate.rem = function(el) {
+					var id = ATTRD(el);
+					var scope = el.scope();
+					var model = scope.get();
+					var index = model.inputs.findIndex('id', id);
+					model.inputs.splice(index, 1);
+					scope.update('inputs');
+					scope.change('*');
+				};
+
+				W.logicGate.move = function(el) {
+					var scope = el.scope();
+					var id = ATTRD(el);
+					var container = el.closest('figure');
+					var inputs = scope.get().inputs;
+					var index = inputs.findIndex('id', id);
+					var is = false;
+					var isup = el.attrd('type') === 'up';
+
+					if (isup) {
+						if (index > 0) {
+							var a = inputs[index];
+							inputs[index] = inputs[index - 1];
+							inputs[index - 1] = a;
+							is = true;
+						}
+					} else {
+						if (index <= inputs.length - 2) {
+							var a = inputs[index];
+							inputs[index] = inputs[index + 1];
+							inputs[index + 1] = a;
+							is = true;
+						}
+					}
+
+					if (is) {
+						NODEMOVE(container, isup);
+						scope.change('*');
+						container.aclass('ismoved').rclass('ismoved', 500);
+					}
+				};
+			}
+		};
+	});
+</script>
+
+<body>
+	<header>
+		<div data-bind="!STATUS__template__show">
+			<script type="text/html">
+				<i class="ICON"></i>{{ value.name }}
+			</script>
+		</div>
+	</header>
+</body>
