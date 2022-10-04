@@ -10,7 +10,9 @@
 		gateType: 'and',
 		inputs: [],
 		positiveJson: 'true',
-		negativeJson: 'false'
+		negativeJson: 'false',
+		positiveDebounce: 0,
+		negativeDebounce: 0,
 	};
 	exports.inputs = [];
 	exports.outputs = [{ id: 'result', name: 'Result' }];
@@ -22,6 +24,8 @@
 		};
 
 		let result = null;
+		let positiveTimeout = null;
+		let negativeTimeout = null;
 
 		instance.configure = function() {
 			instance.status({name: config.name});
@@ -36,6 +40,24 @@
 			instance.save();
 		};
 
+		instance.triggerOutput = function(newResult) {
+			if (newResult === result) return;
+			result = newResult;
+
+			if (positiveTimeout) clearTimeout(positiveTimeout);
+			if (negativeTimeout) clearTimeout(negativeTimeout);
+
+			if (result) {
+				positiveTimeout = setTimeout(() => {
+					instance.send("result", JSON.parse(config.positiveJson));
+				}, config.positiveDebounce);
+			} else {
+				negativeTimeout = setTimeout(() => {
+					instance.send("result", JSON.parse(config.negativeJson));
+				}, config.negativeDebounce);
+			}
+		};
+
 		instance.message = function($) {
 			instance.updateState($.input, $.data);
 
@@ -47,15 +69,7 @@
 				case "noneof": newResult = (numberOfTrue === 0); break;
 			}
 
-			if (newResult !== result) {
-				result = newResult;
-				if (result) {
-					instance.send("result", JSON.parse(config.positiveJson));
-				} else {
-					instance.send("result", JSON.parse(config.negativeJson));
-				}
-			}
-
+			instance.triggerOutput(newResult);
 			$.destroy();
 		};
 
@@ -162,6 +176,14 @@ var total = 'Hello world!';
 			</div>
 			<div class="col-md-3">
 				<div data---="input__?.negativeJson" class="m"><b>Output when false (json)</b></div>
+			</div>
+		</div>
+		<div class="row">
+			<div class="col-md-3">
+				<div data---="input__?.positiveDebounce" class="m"><b>Debounce on positive output (ms)</b></div>
+			</div>
+			<div class="col-md-3">
+				<div data---="input__?.negativeDebounce" class="m"><b>Debounce on negative output (ms)</b></div>
 			</div>
 		</div>
 		<div class="row">
