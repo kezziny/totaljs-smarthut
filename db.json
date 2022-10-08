@@ -1,7 +1,7 @@
 [
 	{
 		"id": "mqtt_io",
-		"group": "MQTT",
+		"group": "SmartHut",
 		"name": "IO",
 		"url": "https://kezziny.github.io/totaljs-smarthut/components/IO.html",
 		"author": "Kezziny",
@@ -12,9 +12,19 @@
 	},
 	{
 		"id": "logic_gate",
-		"group": "Logic",
+		"group": "SmartHut",
 		"name": "Logic Gate",
 		"url": "https://kezziny.github.io/totaljs-smarthut/components/LogicGate.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
+	},{
+		"id": "subscribe",
+		"group": "SmartHut",
+		"name": "Subscribe",
+		"url": "https://kezziny.github.io/totaljs-smarthut/components/Subscribe.html",
 		"author": "Kezziny",
 		"icon": "fa fa-crosshairs",
 		"color": "",
@@ -23,7 +33,7 @@
 	},
 	{
 		"id": "entity",
-		"group": "MQTT",
+		"group": "SmartHut",
 		"name": "Entity",
 		"url": "https://kezziny.github.io/totaljs-smarthut/components/Entity.html",
 		"author": "Kezziny",
