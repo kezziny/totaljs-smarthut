@@ -3,9 +3,9 @@
 	exports.name = 'Entity';
 	exports.icon = 'fa fa-sign-in';
 	exports.group = 'MQTT';
-	exports.config = { name: 'Entity', broker: '', topic: '',  measurements: [] };
-	exports.outputs = [{id: "event", name: "Event"}];
-	exports.inputs = [{id: "input", name: "Input"}];
+	exports.config = { name: 'Entity', broker: '', topic: '', selectedController: 'generic',  controllers: [] };
+	exports.outputs = [];
+	exports.inputs = [];
 	exports.author = 'Ferenc Klein';
 	exports.version = '1';
 	exports.flags = ['mqttbroker-dep'];
@@ -14,64 +14,121 @@
 	exports.make = function(instance, config) {
 		const get = (obj, path) => path.split(".").reduce((r, k) => r?.[k], obj);
 
-		var broker;
-		var subscriptions = [];
+		let mqttData = {broker: null, subscriptions: []};
+		let entityData = {fields: []};
 
-		let measurements = {};
+		let mqtt = {
+			unsubscribe: () => {
+				if (mqttData.subscriptions.length > 0 && mqttData.broker) {
+					mqttData.subscriptions.forEach(topic => {
+						mqttData.broker.unsubscribe(instance.id, topic);
+					});
+					mqttData.subscriptions = [];
+				}
+			},
+			subscribe: () => {
+				mqttData.broker = instance.main.find(config.broker);
 
-		instance.updateInputs = function() {
-			instance.inputs = [];
-			config.measurements.forEach(measurement => {
-				instance.inputs.push({id: measurement.name, name: `${measurement.name} (${measurements[measurement.name].to}${measurement.unit})`});
-			});
-			instance.save();
-		}
+				if (mqttData.broker && config.topic) {
+					mqttData.broker.subscribe(instance.id, config.topic);
+					mqttData.subscriptions.push(config.topic);
 
-		instance.configure = function() {
-			// Create measurement store
-			let oldValues = measurements;
-			measurements = {};
-			config.measurements.forEach(measurement => {
-				if (oldValues.hasOwnProperty(measurement.name)){
-					measurements[measurement.name] = oldValues[measurement.name];
-					measurements[measurement.name].unit = measurement.unit;
-					measurements[measurement.name].tags = measurement.tags;
-				} else measurements[measurement.name] = {
-					name: measurement.name,
-					from: null,
-					to: null,
-					unit: measurement.unit,
-					tags: measurement.tags,
-				};
-			});
-
-			instance.updateInputs();
-
-			// Unsubscribe prev mqtt things
-			if (subscriptions.length > 0 && broker) {
-				subscriptions.forEach(topic => {
-					broker.unsubscribe(instance.id, topic);
-				});
-				subscriptions = [];
-			}
-
-			// Subscribe mqtt
-			broker = instance.main.find(config.broker);
-
-			if (broker && config.topic) {
-				broker.subscribe(instance.id, config.topic);
-				subscriptions.push(config.topic);
-
-				broker.subscribe(instance.id, config.topic + "/set");
-				subscriptions.push(config.topic + "/set");
-
-				instance.status({ name: config.name, status: broker.state.status + ' (subscribed)', topic: config.topic });
-			} else {
-				instance.status({ name: config.name, status: 'Broker not found', topic: config.topic });
-			}
+					mqttData.broker.subscribe(instance.id, config.topic + "/set");
+					mqttData.subscriptions.push(config.topic + "/set");
+				}
+			},
+			status: () => {
+				return (mqttData.broker) ?  mqttData.broker.state.status + ' (subscribed)' : 'Broker not found';
+			},
 		};
 
-		// Mqtt msg received
+		let instanceManager = {
+			updateIO: () => {
+				instance.outputs = [{id: 'updated', name: 'Updated'}, {id: 'controlled', name: 'Controlled'}];
+				instance.inputs = [];
+				config.controllers.forEach(controller => {
+					let input = {id: controller.name, name: controller.name};
+					instance.inputs.push(input);
+				});
+				instance.save();
+			},
+			updateStatus: () => {
+				let controllers = [];
+				config.controllers.forEach(controller => {
+					let ctrl = {
+						name: controller.name,
+						fields: [],
+					};
+
+					entityData.fields.filter(f => f.controller.id === controller.id).forEach(field => {
+						ctrl.fields.push({name: field.name, value: field.state.to, unit: field.unit});
+					});
+					controllers.push(ctrl);
+				});
+
+				instance.status({name: config.name, status: mqtt.status(), controllers: controllers});
+			},
+		};
+
+		let entity = {
+			initFields: () => {
+				let oldFields = entityData.fields;
+				entityData.fields = [];
+				config.controllers.forEach(controller => {
+					controller.fields.forEach(fieldConfig => {
+						let field = oldFields.find(f => f.id === fieldConfig.id);
+						if (!field) {
+							field = {
+								id: fieldConfig.id,
+								state: {from: null, to: null, at: null},
+							};
+						}
+						field.name = fieldConfig.name;
+						field.source = fieldConfig.source;
+						field.unit = fieldConfig.unit;
+						field.tags = fieldConfig.tags;
+						field.controller = controller;
+
+						entityData.fields.push(field);
+					});
+				});
+			},
+			updateValues: (controller, data) => {
+				let controllerFields = entityData.fields.filter(f => f.controller.id === controller.id);
+
+				controllerFields.forEach(field => {
+					let value = get(data, field.source);
+					if (value === null || value === undefined) return;
+
+					if (field.unit === ' ' && typeof value === "string") value = value.toLowerCase() === "on";
+
+					field.state.from = field.state.to;
+					field.state.to = value;
+					field.state.at = Date.now();
+				});
+
+				instanceManager.updateStatus();
+			},
+			syncValues: (data) => {
+
+			},
+			controlValues: (data) => {
+
+			},
+		};
+
+		/* INITIALIZE */
+		instance.configure = function() {
+			entity.initFields();
+			instanceManager.updateIO();
+
+			mqtt.unsubscribe();
+			mqtt.subscribe();
+
+			instanceManager.updateStatus();
+		};
+
+
 		instance.onmessage = function(topic, message, match, ts) {
 			if (topic === config.topic) {
 				// Sync fields
@@ -88,37 +145,15 @@
 			//instance.send('message', { topic, message, match, ts });
 		};
 
-		// Input msg ($.input input received a $.data msg)
 		instance.message = function($) {
-			let events = {};
-
-			if ($.input === "input") {
-				config.measurements.forEach(measurement => {
-					if (!measurement.source) return;
-					let value = get($.data, measurement.source);
-					if (value === undefined) return;
-					if (measurement.unit === " " && typeof value === "string") value = value.toLowerCase() === "true" || value.toLowerCase() === "on";
-
-					measurements[measurement.name].from = measurements[measurement.name].to;
-					measurements[measurement.name].to = value;
-					events[measurement.name] = measurements[measurement.name];
-
-					instance.inputs.forEach(input => { if (input.id === measurement.name) input.name = `${measurement.name} (${value}${measurement.unit})`;});
-				});
-			}
-
-			if (Object.getOwnPropertyNames(events).length > 0) {
-				instance.save();
-				instance.publishMeasurements();
-
-				instance.output({ state: measurements, changed: events, controlled: {} });
-			}
+			let controller = config.controllers.find(c => c.name === $.input);
+			if (controller) entity.updateValues(controller, $.data);
 
 			$.end();
 		};
 
 		instance.publishMeasurements = function () {
-			if (!config.topic) return;
+			/*if (!config.topic) return;
 
 			let payload = {};
 			config.measurements.forEach(measurement => {
@@ -129,21 +164,16 @@
 			if (Object.getOwnPropertyNames(payload).length)
 				broker.publish(config.topic, payload);
 
-			// instance.output($.data);
+			// instance.output($.data);*/
 		}
 
 		instance.input = function(fromflowstreamid, fromid, data) {
-			instance.status({ name: config.name, status: JSON.stringify(data), topic: config.topic });
-			instance.send('event', {state: measurements, controlled: data});
+			//instance.status({ name: config.name, status: JSON.stringify(data), topic: config.topic });
+			//instance.send('event', {state: measurements, controlled: data});
 		};
 
 		instance.close = function() {
-			if (subscriptions.length > 0 && broker) {
-				subscriptions.forEach(topic => {
-					broker.unsubscribe(instance.id, topic);
-				});
-				subscriptions = [];
-			}
+			mqtt.unsubscribe();
 		};
 
 		instance.configure();
@@ -160,23 +190,7 @@
 
 		answer({
 			brokers: arr,
-			units: [
-				{id: "A", name: "Amper"},
-				{id: "[]", name: "Array"},
-				{id: " ", name: "Boolean"},
-				{id: "°C", name: "Celsius"},
-				{id: "dB", name: "Decibel"},
-				{id: "°F", name: "Fahrenheit"},
-				{id: "K", name: "Kelvin"},
-				{id: "kWh", name: "Kilowatt/hour"},
-				{id: "lux", name: "Lux"},
-				{id: "V", name: "Volt"},
-				{id: "W", name: "Watt"},
-				{id: "Pa", name: "Pascal"},
-				{id: "%", name: "Percent"},
-				{id: "Wh", name: "Watt/hour"},
-				{id: "\"", name: "Text"},
-			]});
+		});
 	};
 </script>
 
@@ -246,41 +260,70 @@
 			</div>
 		</div>
 		<div class="row">
-			<div class="col-md-10">Fields</div>
+			<div class="col-md-7">Controllers</div>
+			<div class="col-md-3 unit">
+				<div data---="input__?.selectedController__dirsource:%controllers;dirraw:1;placeholder:Select controller;dirempty:No controller available"></div>
+			</div>
 			<div class="col-md-2">
-				<button class="exec" data-exec="entityMeasurement.add"><i class="fa fa-plus-circle"></i></button>
+				<button class="exec" data-exec="entity.addController"><i class="fa fa-plus-circle"></i></button>
 			</div>
 		</div>
-		<div data-bind="?.measurements__template:figure --> data-id__show:value && value.length" class="fields m">
+		<div data-bind="?.controllers__template:figure --> data-id">
 			<script type="text/html">
-				{{ foreach m in value }}
-					<figure data-id="{{ m.id }}" class="card">
-						<div class="card-header">
+				{{ foreach controller in value }}
+					<figure data-id="{{controller.id}}" data-index="{{$.ctrlId = $index}}" class="card">
+						<div class="card-header" style="background-color: #007bff; color: white;">
 							<div class="row">
 								<div class="col-md-4">
-									<div data---="input__?.measurements[{{ $index }}].name__placeholder:Name;required:1"></div>
+									<div data---="input__?.controllers[{{$index}}].name__placeholder:Name;required:1"></div>
 								</div>
 								<div class="col-md-8">
 									<div style="float:right">
-										<span class="exec" data-exec="entityMeasurement.move" data-type="up" title="Move up"><i class="far fa fa-arrow-up"></i></span>
-										<span class="exec" data-exec="entityMeasurement.move" data-type="down" title="Move down"><i class="far fa fa-arrow-down"></i></span>
-										<span class="exec" data-exec="entityMeasurement.rem" title="Remove"><i class="far fa-trash-alt red"></i></span>
+										<span class="exec" data-exec="entity.moveController" data-type="up" title="Move up"><i class="far fa fa-arrow-up"></i></span>
+										<span class="exec" data-exec="entity.moveController" data-type="down" title="Move down"><i class="far fa fa-arrow-down"></i></span>
+										<span class="exec" data-exec="entity.removeController" title="Remove"><i class="far fa-trash-alt red"></i></span>
 									</div>
 								</div>
 							</div>
 						</div>
 						<div class="card-body">
 							<div class="row">
-								<div class="col-md-3 source">
-									<div data---="input__?.measurements[{{ $index }}].source__placeholder:Source"><b>Source</b></div>
-								</div>
-								<div class="col-md-3 unit">
-									<div data---="input__?.measurements[{{$index}}].unit__dirsource:%units;dirraw:1;placeholder:Select unit;dirempty:No unit available;required:1"><b>Unit</b></div>
-								</div>
-								<div class="col-md-6">
-									<div data---="keyvalue__?.measurements[{{ $index }}].tags__placeholderkey:Type a tag name;placeholdervalue:Type a tag value and press enter">Tags</div>
+								<div class="col-md-10">Fields</div>
+								<div class="col-md-2">
+									<button class="exec" data-controller="{{ $index }}" data-exec="entity.addField"><i class="fa fa-plus-circle"></i></button>
 								</div>
 							</div>
+							{{ foreach field in controller.fields }}
+							<div class="card" data-id="{{ $index }}">
+								<div class="card-header">
+									<div class="row">
+										<div class="col-md-4">
+											<div data---="input__?.controllers[{{ $.ctrlId }}].fields[{{$index}}].name__placeholder:Name;required:1"></div>
+										</div>
+										<div class="col-md-8">
+											<div style="float:right">
+												<span class="exec" data-controller="{{ $.ctrlId }}" data-field="{{ $index }}" data-exec="entity.moveField" data-type="up" title="Move up"><i class="far fa fa-arrow-up"></i></span>
+												<span class="exec" data-controller="{{ $.ctrlId }}" data-field="{{ $index }}" data-exec="entity.moveField" data-type="down" title="Move down"><i class="far fa fa-arrow-down"></i></span>
+												<span class="exec" data-controller="{{ $.ctrlId }}" data-field="{{ $index }}" data-exec="entity.removeField" title="Remove"><i class="far fa-trash-alt red"></i></span>
+											</div>
+										</div>
+									</div>
+								</div>
+								<div class="card-body">
+									<div class="row">
+										<div class="col-md-3 source">
+											<div data---="input__?.controllers[{{ $.ctrlId }}].fields[{{ $index }}].source__placeholder:Source"><b>Source</b></div>
+										</div>
+										<div class="col-md-3 unit">
+											<div data---="input__?.controllers[{{ $.ctrlId }}].fields[{{ $index }}].unit__dirsource:%units;dirraw:1;placeholder:Select unit;dirempty:No unit available;required:1"><b>Unit</b></div>
+										</div>
+										<div class="col-md-6">
+											<div data---="keyvalue__?.controllers[{{ $.ctrlId }}].fields[{{ $index }}].tags__placeholderkey:Type a tag name;placeholdervalue:Type a tag value and press enter">Tags</div>
+										</div>
+									</div>
+								</div>
+							</div>
+							{{ end }}
 						</div>
 					</figure>
 				{{ end }}
@@ -298,10 +341,15 @@
 		</div>
 	</header>
 	<footer>
-		<div data-bind="!STATUS__template__show">
+		<div data-bind="!STATUS__template">
 			<script type="text/html">
 				<div><b>{{ value.status }}</b>Status</div>
-				<div><b>{{ value.topic }}</b>Topic</div>
+				{{ foreach controller in value.controllers }}
+					<i style="font-size: 125%; text-decoration: underline;">{{ controller.name }}</i>
+					{{ foreach field in controller.fields }}
+					<div><b>{{ field.value }}{{ field.unit }}</b>{{field.name}}:</div>
+					{{ end }}
+				{{ end }}
 			</script>
 		</div>
 	</footer>
@@ -311,83 +359,182 @@
 	ON('configure_entity', function(data) {
 		data.call(function(response) {
 			SET('%brokers', response.brokers);
-			SET('%units', response.units);
+			SET('%units', [
+				{id: "A", name: "Amper"},
+				{id: "[]", name: "Array"},
+				{id: " ", name: "Boolean"},
+				{id: "°C", name: "Celsius"},
+				{id: "dB", name: "Decibel"},
+				{id: "°F", name: "Fahrenheit"},
+				{id: "K", name: "Kelvin"},
+				{id: "kWh", name: "Kilowatt/hour"},
+				{id: "lux", name: "Lux"},
+				{id: "V", name: "Volt"},
+				{id: "W", name: "Watt"},
+				{id: "Pa", name: "Pascal"},
+				{id: "%", name: "Percent"},
+				{id: "Wh", name: "Watt/hour"},
+				{id: "\"", name: "Text"},
+			]);
+			SET('%controllers', [
+				{id: "environment", name: "Environment"},
+				{id: "switch", name: "Switch"},
+				{id: "doubleswitch", name: "Double Switch"},
+				{id: "generic", name: "Generic"},
+				{id: "cover", name: "Cover"},
+				{id: "batteryandlqi", name: "Battery and LQI"},
+			]);
 		}, true);
 	});
 
 	TOUCH(function(exports, reinit) {
-
+		let rand = () => Math.random().toString(36).substring(4);
 		exports.settings = function(meta) {
-			if (true || !W.entityMeasurement) {
-				let setterFunction = function(opt, next, attribute) {
-					opt.value = opt.value.replace(/(;|\s|,)/g, '').trim();
-					if (opt.value) {
-						var scope = opt.element.scope();
-						var id = ATTRD(opt.element);
-						var item = scope.get().measurements.findItem('id', id);
-						item[attribute] = opt.value;
-						scope.change('*');
-						next(true);
-					} else
-						next(opt.html);
+			W.entity = {};
+			W.entity.addController = function(el) {
+				var scope = el.scope();
+				let controller = {
+					id: rand(),
+					name: 'Generic',
+					fields: [],
 				};
 
+				switch(scope.get().selectedController) {
+					case 'environment':
+						controller.name = 'Environment';
+						controller.fields = [
+							{ id: rand(), name: 'Temperature', unit: '°C', source: 'message.temperature', tags: {} },
+							{ id: rand(), name: 'Humidity', unit: '%', source: 'message.humidity', tags: {} },
+							{ id: rand(), name: 'Pressure', unit: 'Pa', source: 'message.pressure', tags: {} },
+						];
+						break;
+					case 'switch':
+						controller.name = 'Switch';
+						controller.fields = [
+							{ id: rand(), name: 'State', unit: ' ', source: 'message.state', tags: {} },
+							{ id: rand(), name: 'Power', unit: 'W', source: 'message.power', tags: {} },
+							{ id: rand(), name: 'Energy', unit: 'kWh', source: 'message.energy', tags: {} },
+						];
+						break;
+					case 'doubleswitch':
+						controller.name = 'Switch';
+						controller.fields = [
+							{ id: rand(), name: 'StateLeft', unit: ' ', source: 'message.state_left', tags: {} },
+							{ id: rand(), name: 'StateRight', unit: ' ', source: 'message.state_right', tags: {} },
+							{ id: rand(), name: 'Power', unit: 'W', source: 'message.power', tags: {} },
+							{ id: rand(), name: 'Energy', unit: 'kWh', source: 'message.energy', tags: {} },
+						];
+						break;
+					case 'batteryandlqi':
+						controller.name = 'Battery/LQI';
+						controller.fields = [
+							{ id: rand(), name: 'Battery', unit: '%', source: 'message.battery', tags: {} },
+							{ id: rand(), name: 'LQI', unit: 'dB', source: 'message.lqi', tags: {} },
+						];
+						break;
+				}
 
-				W.entityMeasurement = {};
-				W.entityMeasurement.add = function(el) {
-					var scope = el.scope();
-					scope.push('measurements', {
-						id: Math.random().toString(36).substring(4),
-						name: 'Measurement',
-						unit: 'unit',
-						tags: {},
-						source: "",
-					});
-					scope.change('*');
-				};
+				scope.push('controllers', controller);
+				scope.change('*');
+			};
 
-				W.entityMeasurement.rem = function(el) {
-					var id = ATTRD(el);
-					var scope = el.scope();
-					var model = scope.get();
-					var index = model.measurements.findIndex('id', id);
-					model.measurements.splice(index, 1);
-					scope.update('measurements');
-					scope.change('*');
-				};
+			W.entity.removeController = function(el) {
+				var scope = el.scope();
+				var index = scope.get().controllers.findIndex('id', ATTRD(el));
+				scope.get().controllers.splice(index, 1);
+				scope.update('controllers');
+				scope.change('*');
+			};
 
-				W.entityMeasurement.move = function(el) {
-					var scope = el.scope();
-					var id = ATTRD(el);
-					var container = el.closest('figure');
-					var measurements = scope.get().measurements;
-					var index = measurements.findIndex('id', id);
-					var is = false;
-					var isup = el.attrd('type') === 'up';
+			W.entity.moveController = function(el) {
+				var scope = el.scope();
+				var container = scope.get().controllers;
+				var index = container.findIndex('id', ATTRD(el));
+				var is = false;
 
-					if (isup) {
-						if (index > 0) {
-							var a = measurements[index];
-							measurements[index] = measurements[index - 1];
-							measurements[index - 1] = a;
-							is = true;
-						}
-					} else {
-						if (index <= measurements.length - 2) {
-							var a = measurements[index];
-							measurements[index] = measurements[index + 1];
-							measurements[index + 1] = a;
-							is = true;
-						}
+				if (el.attrd('type') === 'up') {
+					if (index > 0) {
+						var a = container[index];
+						container[index] = container[index - 1];
+						container[index - 1] = a;
+						is = true;
 					}
-
-					if (is) {
-						NODEMOVE(container, isup);
-						scope.change('*');
-						container.aclass('ismoved').rclass('ismoved', 500);
+				} else {
+					if (index <= container.length - 2) {
+						var a = container[index];
+						container[index] = container[index + 1];
+						container[index + 1] = a;
+						is = true;
 					}
-				};
-			}
+				}
+
+				if (is) {
+					let container = el.closest('figure');
+					NODEMOVE(container, el.attrd('type') === 'up');
+					scope.change('*');
+					container.aclass('ismoved').rclass('ismoved', 500);
+				}
+			};
+
+			W.entity.addField = function(el) {
+				let ctrlId = +el.attrd('controller');
+				var scope = el.scope();
+				scope.get().controllers[ctrlId].fields.push(
+					{ id: rand(), name: 'Name', unit: '', source: '', tags: {} },
+				);
+
+				scope.get().controllers[ctrlId].id = rand();
+				scope.update('controllers');
+				scope.change('*');
+			};
+
+			W.entity.removeField = function(el) {
+				var scope = el.scope();
+				let ctrlId = +el.attrd('controller');
+				let fieldId = +el.attrd('field');
+				scope.get().controllers[ctrlId].fields.splice(fieldId, 1);
+
+				scope.get().controllers[ctrlId].id = rand();
+				scope.update('controllers');
+				scope.change('*');
+			};
+
+			W.entity.moveField = function(el) {
+				var scope = el.scope();
+				let ctrlId = +el.attrd('controller');
+				let fieldId = +el.attrd('field');
+				var container = scope.get().controllers[ctrlId].fields;
+				var is = false;
+				var isup = el.attrd('type') === 'up';
+
+				if (isup) {
+					if (fieldId > 0) {
+						var a = container[fieldId];
+						console.log(container[fieldId], container[fieldId-1])
+						container[fieldId] = container[fieldId - 1];
+						container[fieldId - 1] = a;
+						is = true;
+					}
+				} else {
+					if (fieldId <= container.length - 2) {
+						var a = container[fieldId];
+						console.log(container[fieldId], container[fieldId+1])
+						container[fieldId] = container[fieldId + 1];
+						container[fieldId + 1] = a;
+						is = true;
+					}
+				}
+
+				if (is) {
+					let container = el.closest('figure');
+					console.log("container", container);
+					NODEMOVE(container, isup);
+					scope.get().controllers[ctrlId].id = rand();
+					scope.update('controllers');
+					scope.change('*');
+					container.aclass('ismoved').rclass('ismoved', 500);
+				}
+			};
 		};
 	});
 
