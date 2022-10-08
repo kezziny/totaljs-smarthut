@@ -21,8 +21,8 @@
 		"version": "1",
 		"readme": "to be filled"
 	},{
-		"id": "subscribe",
-		"group": "SmartHut",
+		"id": "listen",
+		"group": "Listen",
 		"name": "Subscribe",
 		"url": "https://kezziny.github.io/totaljs-smarthut/components/Subscribe.html",
 		"author": "Kezziny",
