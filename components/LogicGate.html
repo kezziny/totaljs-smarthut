@@ -86,6 +86,8 @@
 				raw = get(raw, cfg.source);
 			}
 
+			if (raw === null || raw === undefined) return;
+
 			let expected = cfg.expected;
 
 			switch (cfg.type) {
