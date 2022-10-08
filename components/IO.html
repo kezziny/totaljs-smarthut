@@ -30,10 +30,8 @@
 		}
 
 		instance.configure = function() {
-			if (!config.name) {
-				let parts = config.topic.split('/');
-				config.name = parts[parts.length - 1];
-			}
+			let parts = config.topic.split('/');
+			config.name = parts[parts.length - 1];
 
 			// Unsubscribe prev mqtt things
 			if (subscriptions.length > 0 && broker) {
@@ -145,11 +143,6 @@
 		<div class="row">
 			<div class="col-md-6">
 				<div data---="input__?.topic__placeholder:devices/status;required:1" class="m"><b>Topic</b></div>
-			</div>
-		</div>
-		<div class="row">
-			<div class="col-md-6">
-				<div data---="input__?.name__placeholder:devices/status" class="m"><b>Name (using last part of topic when left empty)</b></div>
 			</div>
 		</div>
 	</div>
