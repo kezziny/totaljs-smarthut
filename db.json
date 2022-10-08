@@ -20,7 +20,19 @@
 		"color": "",
 		"version": "1",
 		"readme": "to be filled"
-	},{
+	},
+	{
+		"id": "send",
+		"group": "SmartHut",
+		"name": "Send",
+		"url": "https://kezziny.github.io/totaljs-smarthut/components/Send.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
+	},
+	{
 		"id": "listen",
 		"group": "Listen",
 		"name": "Subscribe",
