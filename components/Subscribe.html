@@ -70,7 +70,7 @@
 </script>
 
 <script>
-	ON('configure_subscribe', function(data) {
+	ON('configure_listen', function(data) {
 		data.call(function(response) {
 			console.log(response);
 			SET('%outputs', response);
