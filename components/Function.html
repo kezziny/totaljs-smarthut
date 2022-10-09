@@ -1,32 +1,22 @@
 <script total>
+
 	exports.name = 'Function';
 	exports.group = 'SmartHut';
 	exports.version = '3';
-	exports.icon = 'fa fa-code';
-	exports.author = 'Total.js';
-	exports.config = { name: 'Code', outputs: 1, code: '// instance {FlowStreamInstance};\n// $ {FlowStreamMessage};\n// vars {Object};\n// repo {Object};\n// data {String/Number/Boolean/Date/Buffer/Object};\n// $.send(\'output\', data); // or simply send(data); which uses the first output\n// $.destroy();\n// $.throw(err);\n\n// IMPORTANT: If you do not perform re-send, you need to destroy this message via $.destroy() method\n// IMPORTANT: methods $.send(), $.destroy() and $.throw() can be executed only once\n\n// $.send(\'output\', data);\n$.destroy();' };
+	exports.icon = 'fa fa-history';
+	exports.author = 'Kezziny';
+	exports.config = { name: 'Function', outputs: 1, code: '// instance {FlowStreamInstance};\n// $ {FlowStreamMessage};\n// vars {Object};\n// repo {Object};\n// data {String/Number/Boolean/Date/Buffer/Object};\n// $.send(\'output\', data); // or simply send(data); which uses the first output\n// $.destroy();\n// $.throw(err);\n\n// IMPORTANT: If you do not perform re-send, you need to destroy this message via $.destroy() method\n// IMPORTANT: methods $.send(), $.destroy() and $.throw() can be executed only once\n\n// $.send(\'output\', data);\n$.destroy();' };
 	exports.inputs = [{ id: 'input', name: 'Input' }];
 	exports.outputs = [{ id: 'output', name: 'Output' }];
-	exports.meta = { settingswidth: 1200 };
 
 	exports.make = function(instance, config) {
 
 		var fn;
-
-		instance.message = function($) {
-			if (fn) {
-				try {
-					var send = data => $.send('output', data);
-					fn($.data, instance, $, $, F.require, send, $.repo, $.vars, $.data);
-				} catch (e) {
-					$.throw(e);
-					$.destroy();
-				}
-			}
-		};
+		var empty = true;
+		var status = { empty: true, name: config.name };
+		var timeout = null;
 
 		instance.configure = function() {
-			instance.status({name: config.name});
 			instance.outputs = [];
 			for (let i = 1; i <= config.outputs; i++)
 				instance.outputs.push({ id: 'output' + (i === 1 ? '' : i), name: 'Output #' + i });
@@ -44,36 +34,79 @@
 			}
 		};
 
-		instance.close = function() {
-			fn = null;
+		instance.message = function($) {
+			if (fn) {
+				try {
+					var send = data => instance.messageSender($, data);
+					fn($.data, instance, $, $, F.require, send, $.repo, $.vars, $.data);
+				} catch (e) {
+					$.throw(e);
+					$.destroy();
+				}
+			}
+		};
+
+		instance.messageSender = function($, data) {
+			$.data = data;
+			status.empty = false;
+			status.data = CLONE($.data);
+			status.repo = CLONE($.repo);
+
+			$.send('output');
+
+			if (timeout) {
+				clearTimeout(timeout);
+				timeout = null;
+			}
+
+			timeout = setTimeout(() => {
+				timeout = null;
+				instance.status(status);
+			}, 500);
+
+		};
+
+		instance.trigger = function(msg) {
+			if (msg.type === 'clear') {
+				status.data = null;
+				status.repo = null;
+				status.empty = true;
+				instance.status(status);
+			} else {
+				var message = instance.newmessage(status.data);
+				message.repo = status.repo;
+				message.send('output');
+			}
 		};
 
 		instance.configure();
+		instance.status(status);
 
 	};
 
 </script>
 
 <readme>
-	This component executes a custom JavaScript code as it is.
-
-	To send data to the default output use `send(somedata);`
-	To send data to specific output when number of outputs > 1 use `$.send('outputX', somedata)` where `X` is output index, see example bellow:
-	- first output--> `send(somedata)` or `$.send('output', somedata)`
-	- second output --> `$.send('output2', somedata)`
-	- ...
-	- 5th output --> `$.send('output5', somedata)`
-	- etc.
+The component remembers the data for repeating the action.
 </readme>
 
 <settings>
 	<div class="padding">
 		<div data---="input__?.name" class="m">Name</div>
-		<div data---="input__?.outputs__type:number" class="m">Number of outputs</div>
 		<div class="ui-input-label">Code:</div>
 		<div data---="codemirror__?.code__type:javascript;minheight:300;parent:auto;margin:60;tabs:true;trim:true" class="m"></div>
 	</div>
 </settings>
+
+<style>
+	.CLASS { max-width: 250px; min-width: 150px; }
+	.CLASS .padding { padding: 0 10px 10px; }
+	.CLASS pre { font-size: 10px; margin: 0; padding: 5px; background-color: #F0F0F0; border-radius: var(--radius); }
+	.CLASS footer > div { margin: 10px; }
+	.CLASS .readme { position: absolute; position: absolute; font-size: 11px; right: 5px; margin-top: -5px; cursor: pointer; }
+	.CLASS .noscrollbar { max-height: 250px; }
+	.ui-dark .CLASS pre { background-color: #404040; tab-size: 2; }
+</style>
 
 <body>
 	<header>
@@ -82,5 +115,38 @@
 				<i class="ICON"></i>{{ value.name }}
 			</script>
 		</div>
+		<button class="exec button hidden" data-exec="FUNC.fflashback_clear" data-bind="STATUS.empty__hide">Clear</button>
 	</header>
+	<div class="padding">
+		<button class="exec button" data-exec="FUNC.trigger" data-bind="STATUS.empty__disabled" disabled>Repeat</button>
+	</div>
+	<footer>
+		<div data-bind="!STATUS__html pre:Thelpers.jsonformat(JSON.stringify(value.data, null, '\t'))__hide:value.empty" class="hidden selectable">
+			<span class="readme" title="Open in new window"><i class="far fa-window-restore"></i></span>
+			<div class="noscrollbar">
+				<pre class="json"></pre>
+			</div>
+		</div>
+	</footer>
 </body>
+
+<script>
+
+	FUNC.fflashback_clear = function(el) {
+		SETTER('websocket/send', { TYPE: 'trigger', id: el.attrd2('id'), type: 'clear' });
+	};
+
+	TOUCH(function(exports, reinit) {
+
+		var laststatus;
+
+		exports.status = function(status, isinit) {
+			laststatus = status;
+		};
+
+		exports.element.on('click', '.readme', function() {
+			FUNC.readme('Flashback', '```json\n' + JSON.stringify(laststatus, null, '  ') + '\n```');
+		});
+
+	});
+</script>
