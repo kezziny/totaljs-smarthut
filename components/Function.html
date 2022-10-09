@@ -17,11 +17,6 @@
 		var timeout = null;
 
 		instance.configure = function() {
-			instance.outputs = [];
-			for (let i = 1; i <= config.outputs; i++)
-				instance.outputs.push({ id: 'output' + (i === 1 ? '' : i), name: 'Output #' + i });
-			instance.save();
-
 			try {
 				if (config.code) {
 					fn = new Function('value', 'instance', '$', 'message', 'require', 'send', 'repo', 'vars', 'data', config.code);
