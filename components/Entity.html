@@ -68,6 +68,40 @@
 
 				instance.status({name: config.name, status: mqtt.status(), controllers: controllers});
 			},
+			publish: (updated, controlled) => {
+				let states = {};
+				let updatedStates = {};
+				let controlledStates = controlled;
+
+				entityData.fields.forEach(field => {
+					states[field.name] = {
+						name: field.name,
+						unit: field.unit,
+						tags: field.tags,
+						from: field.state.from,
+						to: field.state.to,
+						at: field.state.at,
+					}
+				});
+				updated.forEach(field => {
+					updatedStates[field.name] = {
+						name: field.name,
+						unit: field.unit,
+						tags: field.tags,
+						from: field.state.from,
+						to: field.state.to,
+						at: field.state.at,
+					}
+				});
+
+				let payload = {states: states, updated: updatedStates, controlled: controlledStates};
+				instance.output(payload);
+
+				if (Object.getOwnPropertyNames(updatedStates).length) instance.send('updated', payload);
+				if (Object.getOwnPropertyNames(controlledStates).length) instance.send('controlled', payload);
+
+				if (config.topic && mqttData.broker) mqttData.broker.publish(config.topic, payload);
+			}
 		};
 
 		let entity = {
@@ -95,6 +129,7 @@
 			},
 			updateValues: (controller, data) => {
 				let controllerFields = entityData.fields.filter(f => f.controller.id === controller.id);
+				let updated = [];
 
 				controllerFields.forEach(field => {
 					let value = get(data, field.source);
@@ -105,23 +140,18 @@
 					field.state.from = field.state.to;
 					field.state.to = value;
 					field.state.at = Date.now();
+					updated.push(field);
 				});
 
-				instanceManager.updateStatus();
+				return updated;
 			},
 			syncValues: (data) => {
-
-			},
-			controlValues: (data) => {
 
 			},
 		};
 
 		/* INITIALIZE */
 		instance.configure = function() {
-			let parts = config.topic.split('/');
-			config.name = parts[parts.length - 1];
-			
 			entity.initFields();
 			instanceManager.updateIO();
 
@@ -150,29 +180,19 @@
 
 		instance.message = function($) {
 			let controller = config.controllers.find(c => c.name === $.input);
-			if (controller) entity.updateValues(controller, $.data);
+			if (controller) {
+				let updated = entity.updateValues(controller, $.data);
+				if (updated.length) {
+					instanceManager.publish(updated, {});
+					instanceManager.updateStatus();
+				}
+			}
 
 			$.end();
 		};
 
-		instance.publishMeasurements = function () {
-			/*if (!config.topic) return;
-
-			let payload = {};
-			config.measurements.forEach(measurement => {
-				if (measurements[measurement.name].to !== null)
-					payload[measurement.name] = measurements[measurement.name];
-			});
-
-			if (Object.getOwnPropertyNames(payload).length)
-				broker.publish(config.topic, payload);
-
-			// instance.output($.data);*/
-		}
-
 		instance.input = function(fromflowstreamid, fromid, data) {
-			//instance.status({ name: config.name, status: JSON.stringify(data), topic: config.topic });
-			//instance.send('event', {state: measurements, controlled: data});
+			instanceManager.publish([], data);
 		};
 
 		instance.close = function() {
@@ -249,6 +269,11 @@
 
 <settings>
 	<div class="padding CLASS-settings">
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.name__placeholder:Entity;required:1" class="m"><b>Entity name</b></div>
+			</div>
+		</div>
 		<div class="row">
 			<div class="col-md-6">
 				<div data---="input__?.broker__dirsource:%brokers;dirraw:1;placeholder:Select broker;dirempty:No broker;required:1" class="m"><b>Broker</b></div>
