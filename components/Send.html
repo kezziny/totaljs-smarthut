@@ -19,7 +19,7 @@
 				if (self.group !== flow.group) continue;
 
 				for (var com of flow.items) {
-					if (com.type === 'input' || com.component === "Entity") {
+					if (com.type === 'input' || com.component === "Entity" || com.component === "I/O") {
 						com.id = flow.id + '_' + com.id;
 						com.name = '<b>' + flow.name.encode() + ':</b> ' + com.name.encode();
 						arr.push(com);
