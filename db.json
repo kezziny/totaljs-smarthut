@@ -53,5 +53,16 @@
 		"color": "",
 		"version": "1",
 		"readme": "to be filled"
+	},
+		{
+		"id": "function",
+		"group": "SmartHut",
+		"name": "Function",
+		"url": "https://kezziny.github.io/totaljs-smarthut/components/Function.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
 	}
 ]
