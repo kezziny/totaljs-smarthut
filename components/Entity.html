@@ -119,6 +119,9 @@
 
 		/* INITIALIZE */
 		instance.configure = function() {
+			let parts = config.topic.split('/');
+			config.name = parts[parts.length - 1];
+			
 			entity.initFields();
 			instanceManager.updateIO();
 
@@ -246,11 +249,6 @@
 
 <settings>
 	<div class="padding CLASS-settings">
-		<div class="row">
-			<div class="col-md-6">
-				<div data---="input__?.name__placeholder:Entity;required:1" class="m"><b>Entity name</b></div>
-			</div>
-		</div>
 		<div class="row">
 			<div class="col-md-6">
 				<div data---="input__?.broker__dirsource:%brokers;dirraw:1;placeholder:Select broker;dirempty:No broker;required:1" class="m"><b>Broker</b></div>
