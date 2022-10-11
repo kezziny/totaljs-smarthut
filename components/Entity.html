@@ -100,7 +100,7 @@
 				if (Object.getOwnPropertyNames(updatedStates).length) instance.send('updated', payload);
 				if (Object.getOwnPropertyNames(controlledStates).length) instance.send('controlled', payload);
 
-				if (config.topic && mqttData.broker) mqttData.broker.publish(config.topic, payload);
+				if (config.topic && mqttData.broker) mqttData.broker.publish(config.topic, payload.states);
 			}
 		};
 
@@ -146,14 +146,44 @@
 				return updated;
 			},
 			syncValues: (data) => {
+				let updated = [];
+				Object.getOwnPropertyNames(data).forEach(key => {
+					let field = entityData.fields.find(f => f.name === key);
+					if (field) {
+						if (data[key].to === field.state.to) return;
+					} else {
+						let syncedGroup = config.controllers.find(c => c.name === "Synced");
+						field = {
+							id: 'synced',
+							name: key,
+							state: {
+								from: null,
+								to: null,
+								at: null
+							},
+							source: '',
+							unit: data[key].unit,
+							tags: data[key].tags,
+							controller: syncedGroup,
+						};
+						entityData.fields.push(field);
+					}
 
+					field.state.from = data[key].from;
+					field.state.to = data[key].to;
+					field.state.at = data[key].at;
+
+					updated.push(field);
+				});
+
+				return updated;
 			},
 		};
 
 		/* INITIALIZE */
 		instance.configure = function() {
-			let parts = config.topic.split('/');
-			config.name = parts[parts.length - 1];
+			let syncedGroup = config.controllers.find(c => c.name === "Synced");
+			if (!syncedGroup) config.controllers.push({id: 'synced', name: 'Synced', fields: [], source: ''});
 
 			entity.initFields();
 			instanceManager.updateIO();
@@ -167,7 +197,12 @@
 
 		instance.onmessage = function(topic, message, match, ts) {
 			if (topic === config.topic) {
-				// Sync fields
+				let updated = entity.syncValues(message);
+				if (updated.length)
+				{
+					instanceManager.publish(updated, {});
+					instanceManager.updateStatus();
+				}
 			} else {
 				// Handle control messages
 				/*let commands = [];
@@ -272,6 +307,11 @@
 
 <settings>
 	<div class="padding CLASS-settings">
+		<div class="row">
+			<div class="col-md-6">
+				<div data---="input__?.name__placeholder:Entity;required:1" class="m"><b>Entity name</b></div>
+			</div>
+		</div>
 		<div class="row">
 			<div class="col-md-6">
 				<div data---="input__?.broker__dirsource:%brokers;dirraw:1;placeholder:Select broker;dirempty:No broker;required:1" class="m"><b>Broker</b></div>
