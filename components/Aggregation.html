@@ -1,0 +1,110 @@
+<script total>
+
+	exports.name = 'Aggregation';
+	exports.icon = 'fa fa-code';
+	exports.author = 'Kezziny';
+	exports.version = '1';
+	exports.group = 'SmartHut';
+	exports.config = {
+		inputs: 1,
+		source: '',
+		aggregation: 'sum'
+	};
+	exports.inputs = [];
+	exports.outputs = [{ id: 'result', name: 'Result' }];
+
+	exports.make = function(instance, config) {
+		const get = (obj, path) => path.split(".").reduce((r, k) => r?.[k], obj);
+
+		const set = (obj, path, value) => {
+			var schema = obj;
+			var pList = path.split('.');
+			var len = pList.length;
+			for(var i = 0; i < len-1; i++) {
+				var elem = pList[i];
+				if( !schema[elem] ) schema[elem] = {}
+				schema = schema[elem];
+			}
+			schema[pList[len-1]] = value;
+			return obj;
+		};
+
+		let states = [];
+
+		instance.configure = function() {
+			let newStates = [];
+			instance.inputs = [];
+			for (let i = 0; i < config.inputs; ++i) {
+				instance.inputs.push({id: `input${i}`, name: `Input ${i}`});
+				let state = {id: `input${i}`, value: null};
+				if (states.length > i) state.value = states[i].value;
+				newStates.push(state);
+			}
+			states = newStates;
+			instance.save();
+		};
+
+		instance.message = function($) {
+			let state = states.find(s => s.id === $.input);
+			state.value = get($.data, config.source);
+
+			if(states.every(s => s.value !== null && s.value !== undefined)) {
+				let result = states.map(s => s.value).reduce((sum, a) => sum += a, 0);
+				instance.send('result', set({}, config.source, result));
+			}
+
+			$.destroy();
+		};
+
+		instance.close = function() {
+			// this instance is closed
+		};
+
+		instance.configure();
+	};
+
+</script>
+
+<readme>
+Markdown readme
+
+```js
+var total = 'Hello world!';
+```
+</readme>
+
+<settings>
+	<div class="padding">
+		<div class="row">
+			<div class="col-md-3">
+				<div data---="input__?.inputs" class="m"><b>Inputs</b></div>
+			</div>
+			<div class="col-md-3">
+				<div data---="input__?.source" class="m"><b>Source</b></div>
+			</div>
+			<div class="col-md-3">
+				<div data---="input__?.aggregation__dirsource:%aggregation;dirraw:1;placeholder:Select type;dirempty:No type available;required:1" class="m"><b>Aggregation</b></div>
+			</div>
+		</div>
+	</div>
+</settings>
+
+<style>
+	.CLASS footer { padding: 10px; font-size: 12px; }
+</style>
+
+<script>
+	ON('configure_logicgate', function(data) {
+		SET('%aggregation', [{id: 'sum', name: 'Sum of'}]);
+	});
+</script>
+
+<body>
+	<header>
+		<div data-bind="!STATUS__template__show">
+			<script type="text/html">
+				<i class="ICON"></i>{{ value.name }}
+			</script>
+		</div>
+	</header>
+</body>
