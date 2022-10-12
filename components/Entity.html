@@ -74,6 +74,7 @@
 				let controlledStates = controlled;
 
 				entityData.fields.forEach(field => {
+					if (field.state.at < Date.now() - (1000 * 60 * 60 * 24)) return;
 					states[field.name] = {
 						name: field.name,
 						unit: field.unit,
@@ -148,6 +149,7 @@
 			syncValues: (data) => {
 				let updated = [];
 				Object.getOwnPropertyNames(data).forEach(key => {
+					if (!data[key].at || data[key].at < Date.now() - (1000 * 60 * 60 * 24)) return;
 					let field = entityData.fields.find(f => f.name === key);
 					if (field) {
 						if (data[key].to === field.state.to) return;
