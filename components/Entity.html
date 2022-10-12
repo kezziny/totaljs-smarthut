@@ -204,16 +204,8 @@
 					instanceManager.updateStatus();
 				}
 			} else {
-				// Handle control messages
-				/*let commands = [];
-				Object.getOwnPropertyNames($.data).forEach(key => {
-					if (!config.measurements.some(measurement => measurement.name === key)) return;
-
-					commands.push($.data[key]);
-				});*/
+				instanceManager.publish([], message);
 			}
-
-			//instance.send('message', { topic, message, match, ts });
 		};
 
 		instance.message = function($) {
