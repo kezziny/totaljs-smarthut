@@ -48,9 +48,6 @@
 				broker.subscribe(instance.id, config.topic);
 				subscriptions.push(config.topic);
 
-				broker.subscribe(instance.id, config.topic + "/set");
-				subscriptions.push(config.topic + "/set");
-
 				status.status = broker.state.status + ' (subscribed)';
 				status.topic = config.topic;
 			} else {
