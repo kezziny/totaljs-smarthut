@@ -148,6 +148,7 @@
 			},
 			syncValues: (data) => {
 				let updated = [];
+				try {
 				Object.getOwnPropertyNames(data).forEach(key => {
 					if (!data[key].at || data[key].at < Date.now() - (1000 * 60 * 60 * 24)) return;
 					let field = entityData.fields.find(f => f.name === key);
@@ -179,6 +180,7 @@
 				});
 
 				return updated;
+				} catch (err) return [];
 			},
 		};
 
