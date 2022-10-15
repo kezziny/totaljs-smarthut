@@ -32,6 +32,7 @@
 		let states = [];
 
 		instance.configure = function() {
+			instance.status({source: config.source, aggregation: config.aggregation});
 			let newStates = [];
 			instance.inputs = [];
 			for (let i = 0; i < config.inputs; ++i) {
@@ -103,8 +104,7 @@ var total = 'Hello world!';
 	<header>
 		<div data-bind="!STATUS__template__show">
 			<script type="text/html">
-				<i class="ICON"></i>{{ value.name }}
+				<i class="ICON"></i><b>{{ value.source }}</b> ({{ value.aggregation }})
 			</script>
-		</div>
-	</header>
+		</div>	</header>
 </body>
