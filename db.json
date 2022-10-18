@@ -75,5 +75,17 @@
 		"color": "",
 		"version": "1",
 		"readme": "to be filled"
+	},
+	
+	{
+		"id": "switchcontroller",
+		"group": "Controller",
+		"name": "SwitchController",
+		"url": "https://kezziny.github.io/totaljs-smarthut/components/Controllers/SwitchController.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
 	}
 ]
