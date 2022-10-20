@@ -1,1 +1,183 @@
 
+<script total>
+
+	exports.name = 'CoverController';
+	exports.group = 'Controllers';
+	exports.version = '3';
+	exports.icon = 'fa fa-crosshairs';
+	exports.author = 'Kezziny';
+	exports.config = { device: '', state: 'State', position: 'Position' };
+	exports.inputs = [{ id: 'data', name: 'Data' }];
+	exports.type = 'output2';
+
+	exports.make = function(instance, config) {
+		let status = {name: '', msg: null};
+
+		let controllerData = {};
+		let controller = {
+			control: (msg) => {
+				if (msg.controlled[config.position]) {
+					instance.publish({position: msg.controlled[config.position].to});
+				} else if (msg.controlled[config.state]) {
+					if (msg.controlled[config.state].to === "open") {
+						instance.publish({position: 100});
+					}
+					if (msg.controlled[config.state].to === "close") {
+						instance.publish({position: 0});
+					}
+					if (msg.controlled[config.state].to === "stop") {
+						instance.publish({position: data.states.Position.to});
+					}
+				}
+			},
+			button: (button) => {
+				if (button === "open") {
+					instance.publish({position: 100});
+				} else if (button === "close") {
+					instance.publish({position: 0});
+				}
+			}
+		};
+
+		var flowstreamid;
+		var instanceid;
+
+		instance.message = function(msg) {
+			if (flowstreamid && instanceid)
+				controller.control(msg.data);
+			msg.destroy();
+		};
+
+		instance.publish = function(data) {
+			status.msg = data;
+			instance.toinput(data, flowstreamid, instanceid);
+			instance.status(status);
+		}
+
+		instance.flowstream = function(id, type) {
+			if (!id || (config.device && config.device.split('_')[0] === id))
+				refresh();
+		};
+
+		var refresh = function() {
+			if (config.device) {
+				var arr = config.device.split('_');
+				flowstreamid = arr[0];
+				instanceid = arr[1];
+				instance.io(flowstreamid, instanceid, function(err, com) {
+					if (com)
+						status.name = com.name.substring(4) + '/' + com.item.name
+					else
+						status.name = '';
+
+					instance.status(status);
+				});
+			} else
+				status.name = '';
+
+			instance.status(status);
+		};
+
+		instance.configure = function() {
+			refresh();
+		};
+
+		setTimeout(refresh, 3000);
+
+		instance.trigger = function(msg) {
+			controller.button(msg.command);
+		};
+	};
+
+	exports.call = function(data, answer) {
+		this.io(function(err, response) {
+			let self = response.find(flow => flow.id === this.id);
+
+			var arr = [];
+			for (var flow of response) {
+				if (!flow.name.startsWith("Z2M-")) continue;
+				if (flow.group && self.group !== flow.group) continue;
+
+				for (var com of flow.items) {
+					if (com.type === "input" || com.component === "I/O") {
+						com.id = flow.id + '_' + com.id;
+						com.name = '<b>' + flow.name.encode() + ':</b> ' + com.name.encode();
+						arr.push(com);
+					}
+				}
+			}
+			arr.quicksort('name');
+			answer(arr);
+		});
+	};
+
+</script>
+
+<script>
+	ON('configure_covercontroller', function(data) {
+		data.call(function(response) {
+			SET('%inputs', response);
+		}, true);
+	});
+
+	FUNC.controller_open = function(el) {
+		SETTER('websocket/send', { TYPE: 'trigger', id: el.attrd2('id'), command: 'open' });
+	};
+
+	FUNC.controller_close = function(el) {
+		SETTER('websocket/send', { TYPE: 'trigger', id: el.attrd2('id'), command: 'close' });
+	};
+
+	TOUCH(function(exports, reinit) {
+
+		var laststatus;
+
+		exports.status = function(status, isinit) {
+			laststatus = status?.msg;
+		};
+
+		exports.element.on('click', '.readme', function() {
+			FUNC.readme('Flashback', '```json\n' + JSON.stringify(laststatus, null, '  ') + '\n```');
+		});
+
+	});
+</script>
+
+<settings>
+	<div class="padding">
+		<div data---="input__?.state" class="m">Name of controlled state</div>
+	</div>
+	<div class="padding">
+		<div data---="input__?.position" class="m">Name of controlled position</div>
+	</div>
+	<div class="padding">
+		<div data---="input__?.device__dirsource:%inputs;dirraw:1;placeholder:Choose a specific input;dirempty:No input" class="m"><b>Input</b></div>
+	</div>
+</settings>
+
+<readme>
+The component publish the data to the specific `Input` component.
+</readme>
+
+<style>
+	.CLASS .readme { cursor: pointer; }
+</style>
+
+<body>
+	<header style="background-color: #ffcc88">
+		<div data-bind="!STATUS__html pre:Thelpers.jsonformat(JSON.stringify(value.msg, null, '\t'))" class="selectable" style="float: left">
+			<span class="readme" title="Open in new window"><i class="far ICON"></i></span>
+		</div>
+		<b class="monospace" data-bind="STATUS.name__text__empty"></b>
+	</header>
+	<footer>
+		<div class="row">
+			<div class="col-md-6">
+				<button class="exec button hidden" data-exec="FUNC.controller_open" data-bind="STATUS.empty__hide">Open</button>
+			</div>
+			<div class="col-md-6">
+				<button class="exec button hidden" data-exec="FUNC.controller_close" data-bind="STATUS.empty__hide">Close</button>
+			</div>
+		</div>
+	</footer>
+</body>
