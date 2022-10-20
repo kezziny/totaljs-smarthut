@@ -87,5 +87,16 @@
 		"color": "",
 		"version": "1",
 		"readme": "to be filled"
+	},
+	{
+		"id": "covercontroller",
+		"group": "Controller",
+		"name": "CoverController",
+		"url": "https://kezziny.github.io/totaljs-smarthut/components/Controllers/CoverController.html",
+		"author": "Kezziny",
+		"icon": "fa fa-crosshairs",
+		"color": "",
+		"version": "1",
+		"readme": "to be filled"
 	}
 ]
