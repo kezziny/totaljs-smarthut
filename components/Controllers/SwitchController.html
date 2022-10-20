@@ -1,4 +1,3 @@
-
 <script total>
 
 	exports.name = 'StateController';
@@ -6,7 +5,7 @@
 	exports.version = '3';
 	exports.icon = 'fa fa-crosshairs';
 	exports.author = 'Kezziny';
-	exports.config = { device: '', state: 'State' };
+	exports.config = { device: '', state: '' };
 	exports.inputs = [{ id: 'data', name: 'Data' }];
 	exports.type = 'output2';
 
@@ -19,6 +18,9 @@
 				if (msg.controlled[config.state]) {
 					instance.publish({state: msg.controlled[config.state].to ? "on" : "off"});
 				}
+			},
+			button: (button) => {
+				instance.publish({state: button === "on" ? "on" : "off"});
 			}
 		};
 
@@ -66,6 +68,10 @@
 		};
 
 		setTimeout(refresh, 3000);
+
+		instance.trigger = function(msg) {
+			controller.button(msg.command);
+		};
 	};
 
 	exports.call = function(data, answer) {
@@ -98,6 +104,14 @@
 			SET('%inputs', response);
 		}, true);
 	});
+
+	FUNC.controller_on = function(el) {
+		SETTER('websocket/send', { TYPE: 'trigger', id: el.attrd2('id'), command: 'on' });
+	};
+
+	FUNC.controller_off = function(el) {
+		SETTER('websocket/send', { TYPE: 'trigger', id: el.attrd2('id'), command: 'off' });
+	};
 
 	TOUCH(function(exports, reinit) {
 
@@ -138,4 +152,14 @@ The component publish the data to the specific `Input` component.
 		</div>
 		<b class="monospace" data-bind="STATUS.name__text__empty"></b>
 	</header>
+	<footer>
+		<div class="row">
+			<div class="col-md-6">
+				<button class="exec button hidden" data-exec="FUNC.controller_on" data-bind="STATUS.empty__hide">On</button>
+			</div>
+			<div class="col-md-6">
+				<button class="exec button hidden" data-exec="FUNC.controller_off" data-bind="STATUS.empty__hide">Off</button>
+			</div>
+		</div>
+	</footer>
 </body>
