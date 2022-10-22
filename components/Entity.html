@@ -139,6 +139,7 @@
 
 					if (field.unit === ' ' && typeof value === "string") value = value.toLowerCase() === "on";
 
+					if (field.state.to === value) return;
 					field.state.from = field.state.to;
 					field.state.to = value;
 					field.state.at = Date.now();
