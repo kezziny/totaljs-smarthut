@@ -140,7 +140,7 @@
 					if (field.unit === ' ' && typeof value === "string") value = value.toLowerCase() === "on";
 
 					if (field.state.to === value) return;
-					if (typeof value === "number" && Math.abs(value - field.state.to) < 0.0001) return;
+					if (typeof value === "number" && typeof field.state.to === "number" && Math.abs(value - field.state.to) < 0.0001) return;
 					field.state.from = field.state.to;
 					field.state.to = value;
 					field.state.at = Date.now();
