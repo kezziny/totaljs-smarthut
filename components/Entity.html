@@ -16,6 +16,7 @@
 
 		let mqttData = {broker: null, subscriptions: []};
 		let entityData = {fields: []};
+		let instanceManagerData = { reportInProgress: null };
 
 		let mqtt = {
 			unsubscribe: () => {
@@ -70,39 +71,42 @@
 				instance.status({name: config.name, status: mqtt.status(), controllers: controllers});
 			},
 			publish: (updated, controlled, broadcast = true) => {
-				let states = {};
-				let updatedStates = {};
-				let controlledStates = controlled;
+				if (instanceManagerData.reportInProgress) clearTimeout(instanceManagerData.reportInProgress);
+				instanceManagerData.reportInProgress = setTimeout(() => {
+					let states = {};
+					let updatedStates = {};
+					let controlledStates = controlled;
 
-				entityData.fields.forEach(field => {
-					if (field.state.at < Date.now() - (1000 * 60 * 60 * 24)) return;
-					states[field.name] = {
-						name: field.name,
-						unit: field.unit,
-						tags: field.tags,
-						from: field.state.from,
-						to: field.state.to,
-						at: field.state.at,
-					}
-				});
-				updated.forEach(field => {
-					updatedStates[field.name] = {
-						name: field.name,
-						unit: field.unit,
-						tags: field.tags,
-						from: field.state.from,
-						to: field.state.to,
-						at: field.state.at,
-					}
-				});
+					entityData.fields.forEach(field => {
+						if (field.state.at < Date.now() - (1000 * 60 * 60 * 24)) return;
+						states[field.name] = {
+							name: field.name,
+							unit: field.unit,
+							tags: field.tags,
+							from: field.state.from,
+							to: field.state.to,
+							at: field.state.at,
+						}
+					});
+					updated.forEach(field => {
+						updatedStates[field.name] = {
+							name: field.name,
+							unit: field.unit,
+							tags: field.tags,
+							from: field.state.from,
+							to: field.state.to,
+							at: field.state.at,
+						}
+					});
 
-				let payload = {states: states, updated: updatedStates, controlled: controlledStates};
-				instance.output(payload);
+					let payload = {states: states, updated: updatedStates, controlled: controlledStates};
+					instance.output(payload);
 
-				if (Object.getOwnPropertyNames(updatedStates).length) instance.send('updated', payload);
-				if (Object.getOwnPropertyNames(controlledStates).length) instance.send('controlled', payload);
+					if (Object.getOwnPropertyNames(updatedStates).length) instance.send('updated', payload);
+					if (Object.getOwnPropertyNames(controlledStates).length) instance.send('controlled', payload);
 
-				if (broadcast && config.topic && mqttData.broker) mqttData.broker.publish(config.topic, payload.states);
+					if (broadcast && config.topic && mqttData.broker) mqttData.broker.publish(config.topic, payload.states);
+				}, 1000);
 			}
 		};
 
@@ -157,6 +161,7 @@
 					let field = entityData.fields.find(f => f.name === key);
 					if (field) {
 						if (data[key].to === field.state.to) return;
+						if (typeof field.state.to === 'number' && Math.abs(data[key].to - field.state.to) < 0.001) return;
 					} else {
 						let syncedGroup = config.controllers.find(c => c.name === "Synced");
 						field = {
@@ -391,7 +396,7 @@
 </settings>
 
 <body>
-	<header style="background-color: #557bff">
+	<header>
 		<div data-bind="!STATUS__template__show">
 			<script type="text/html">
 				<i class="ICON"></i>{{ value.name }}
